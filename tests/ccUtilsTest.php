@@ -102,7 +102,7 @@ class ccFileTest extends ccTestCase
   public function testFirstLine()
   {
     $path = $this->getFilePath('testFirstLine');
-    $expected = 'first line';
+    $expected = "first line";
     
     $f = $path.'simple.txt';
     $result = ccFile::firstLine($f);

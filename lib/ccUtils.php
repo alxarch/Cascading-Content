@@ -16,16 +16,18 @@ class ccFile
   
   static public function firstLine($file)
   {
-    $fh = @fopen($file, 'r');
-    $line = false;
-    
+    $fh = fopen($file, 'r');
     if($fh)
     {
-      for($line=fgets($fh); false!== $line && empty($line); $line = trim(fgets($fh)));
+      while(($line = fgets($fh)) !== false)
+      {
+        if(!preg_match("/^\s*$/", $line)) break;
+      }
     }
     
     fclose($fh);
-    return $line;
+    
+    return trim($line, "\n");
   }
    
   static public function extension($f)
@@ -153,13 +155,14 @@ class ccArray
     if(!is_array($value))
     {
       $value = explode(',', $value);
-      $result = array();
-      foreach($value as $v)
-      {
-        $result[] = trim($v);
-      }
-      return $result;
+      
     }
-    return $value;
+    $result = array();
+
+    foreach($value as $v)
+    {
+      $result[] = trim($v);
+    }
+    return $result;
   }
 }
