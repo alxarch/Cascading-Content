@@ -1,4 +1,13 @@
 <?php
+/**
+ *  @package CascadingContent
+ *  
+ *  @author Alexandros Sigalas <alxarch@gmail.com>
+ *  @copyright Copyright (c) 2011, Alexandros Sigalas
+ *  
+ *  @license http://www.apache.org/licenses/LICENSE-2.0 Apache License, v2.0
+ * 
+ */
 
 define('DS', DIRECTORY_SEPARATOR);
 
