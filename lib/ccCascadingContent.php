@@ -27,7 +27,7 @@ class ccCascadingContent
       'meta_name'    => 'meta',
       'meta_dir'     => '__meta__',
       'part_dir'     => '__part__',
-      'files_dir'    => '__files__',
+      'attachments'  => '__attachments__',
       'img_dir'      => '__img__',
       'base_path'    => ccPath::to($_SERVER['SCRIPT_NAME']),
       'root_dir'     => $root,
@@ -98,9 +98,9 @@ class ccCascadingContent
 
     $this->registerContentType('script', 'js', 'js');
 
-    $this->registerContentType('content', 'markdown', 'markdown, md');
-    $this->registerContentType('content', 'html', 'html, htm');
-    $this->registerContentType('content', 'php', 'php, phtml');
+    $this->registerContentType('content', 'markdown', 'markdown,md');
+    $this->registerContentType('content', 'html', 'html,htm');
+    $this->registerContentType('content', 'php', 'php,phtml');
 
     $this->registerContentType('layout', 'html', 'html');
     $this->registerContentType('layout', 'php', 'php');
@@ -116,8 +116,7 @@ class ccCascadingContent
       $this->_registered_types[$category] = array();
     }
     
-    if(!is_array($extensions)) $extensions = explode(',', $extensions);
-    $extensions = array_walk($extensions, 'trim');
+    $extensions = ccArray::make($extensions);
 
     $this->_registered_types[$category][$type] = $extensions;
     
@@ -145,10 +144,18 @@ class ccCascadingContent
 
   public function serve($path)
   {
-    $output = $this->getCache()->retrieve($path);
+    if($this->getConfig()->get('cache',true))
+    {
+      $output = $this->getCache()->retrieve($path);
+    }
+    else
+    {
+      $output = false;
+    }
     
     if(!$output)
     {
+         
       $output = $this->generate($path);
     
       if(null === $output)
@@ -156,11 +163,9 @@ class ccCascadingContent
         $this->notFound();
       }
 
-      $this->getCache()->store($path, $output);
+      $this->getCache()->store($path.'.html', $output);
     }
-    
     echo $output;
-    
     exit(0);
   }
   
@@ -174,17 +179,18 @@ class ccCascadingContent
   protected function generate($path)
   {
     require_once 'ccHelpers.php';
-    
+
     $this->setContext('path', $path);
-    
+
     $content = $this->getContent($path);
-    
+
     if(null == $content)
     {
       return null;
     }
-    
+
     $scripts = $this->getScripts($path);
+
     $styles  = $this->getStyles($path);
     $meta    = $this->getMeta($path);
     $layout  = $this->getLayout($path);
@@ -192,7 +198,7 @@ class ccCascadingContent
     $title = isset($meta['@title']) ? $meta['@title'] : path_to_title($path);
     $this->setContext('title', $title);
     
-    if($layout->type == 'php')
+    if(is_a($layout, 'ccContentPhp'))
     {
       $this->setContext(array(
         'title'   => $title,
@@ -206,8 +212,8 @@ class ccCascadingContent
        $this->setContext(array(
         'title'   => $title,
         'meta'    => meta($meta),
-        'scripts' => scripts($scripts),
-        'styles'  => styles($styles),
+        'scripts' => scripts($scripts, $this->base_path),
+        'styles'  => styles($styles, $this->base_path),
       ));
     }
     $content = $content->render($this->getContext());
@@ -219,11 +225,14 @@ class ccCascadingContent
 
   protected function getFinder($type)
   {
+    $idx = sprintf("%s_name", $type === 'content' ? 'index' : $type);
+    $dir = $type === 'content' ? null : $type.'_dir';
+    
     $finder = ccFinderFactory::createFinder($type, 
       $this->getConfig()->get('content_dir'),
       $this->getRegisteredTypes($type),
-      $this->getConfig()->get($type.'_name'),
-      $this->getConfig()->get($type.'_dir'));
+      $this->getConfig()->get($idx),
+      $this->getConfig()->get($dir));
     
     return $finder;
   }
@@ -244,7 +253,7 @@ class ccCascadingContent
     $finder = $this->getFinder('meta');
 
     $results = $finder->find($path);
-    
+
     foreach($results as $r)
     {
       $m = $r->render($this->getContext());
@@ -259,7 +268,7 @@ class ccCascadingContent
   {
     $finder = $this->getFinder('style');
 
-    $styles = $finder->findPath($path);
+    $styles = $finder->findPath($path, $this->getConfig()->get('root_dir'));
     
     return $styles;
   }   
@@ -278,7 +287,7 @@ class ccCascadingContent
     
     $finder = $this->getFinder('script');
 
-    $scripts = $finder->findPath($path, $this->getConfig()->get('base_dir'));
+    $scripts = $finder->findPath($path, $this->getConfig()->get('root_dir'));
     
     return $scripts;
   }
@@ -309,7 +318,7 @@ class ccCascadingContent
       'css' => $this->getConfig()->get('style_dir'),
       'img' => $this->getConfig()->get('img_dir'),
       '/' => $this->getConfig()->get('base_path'),
-      'files' => $this->getConfig()->get('files_dir'),
+      '@' => $this->getConfig()->get('attachments'),
     ));
   }
   

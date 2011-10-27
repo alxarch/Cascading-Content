@@ -40,14 +40,14 @@ function _ucfirst($string)
   
 }
 
-function scripts($scripts, $defer=true)
+function scripts($scripts, $base='')
 {
   if(null === $scripts) return '';
   $result = array();
   
   foreach($scripts as $src)
   {
-    $s = sprintf('<script %s src="%s"></script>', $defer?'defer':'',  $src );
+    $s = sprintf('<script src="%s%s"></script>', $base,  $src );
     $result[] = $s;
   }
   
@@ -68,14 +68,14 @@ function meta($meta)
   return implode("\n", $result);
 }
 
-function styles($styles)
+function styles($styles, $base)
 {
   if(null === $styles) return '';
   
   $result = array();
   foreach($styles as $href)
   {
-    $s = sprintf('<link href="%s" rel="stylesheet" type="text/css">', $href);
+    $s = sprintf('<link href="%s%s" rel="stylesheet" type="text/css">', $base, $href);
     $result[] = $s;
   }
   

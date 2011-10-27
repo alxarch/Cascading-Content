@@ -12,7 +12,7 @@ class ccFile
     
     if($fh)
     {
-      for($line=""; empty($line); $line = trim(fgets($fh)));
+      for($line=fgets($fh); false!== $line && empty($line); $line = trim(fgets($fh)));
     }
     
     fclose($fh);
@@ -63,7 +63,8 @@ class ccPath
 
   static function relative($path, $base)
   {
-    if(strpos($path, $base) == 0)
+    $pos = strpos($path, $base);
+    if($pos == 0)
     {
       $path = substr($path, strlen($base), strlen($path));
       $path = self::web($path);
@@ -95,8 +96,11 @@ class ccPath
       $a = str_replace('\\', DS, $a);
       $parts[] = $a;
     }
+    $result = implode(DS, $parts);
     
-    return implode(DS, $parts);
+    $result = str_replace(DS.DS, DS, $result);
+    
+    return $result;
     
   }
   
@@ -110,8 +114,11 @@ class ccPath
       $a = str_replace('\\', '/', $a);
       $parts[] = $a;
     }
+    $result = implode(DS, $parts);
     
-    return implode(DS, $parts);
+    $result = str_replace('//', '/', $result);
+    
+    return $result;
     
   }
 
@@ -126,5 +133,24 @@ class ccPath
     }
     
     return $paths;
+  }
+}
+
+
+class ccArray
+{
+  static public function make($value)
+  {
+    if(!is_array($value))
+    {
+      $value = explode(',', $value);
+      $result = array();
+      foreach($value as $v)
+      {
+        $result[] = trim($v);
+      }
+      return $result;
+    }
+    return $value;
   }
 }

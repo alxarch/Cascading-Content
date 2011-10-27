@@ -57,7 +57,6 @@ class ccContent implements ccContentInterface
   protected $_opentag = '{{';
   protected $_closetag = '}}';
   
-  protected $_type;
   protected $_file;
   protected $_master = false;
   
@@ -96,7 +95,8 @@ class ccContent implements ccContentInterface
     $content = $this->getContents();
     
     $content = $this->doRender($content, $context);
-    
+   
+
     if(method_exists($this, 'postFilter'))
     {
       $content = $this->postFilter($content);
@@ -108,6 +108,7 @@ class ccContent implements ccContentInterface
   public function getRawContents()
   {
     $contents = file_get_contents($this->getFile());
+    return $contents;
   }
   
   public function getContents()
@@ -136,7 +137,7 @@ class ccContent implements ccContentInterface
   {
     return $this->_file;
   }
-    
+
   protected function doRender($content, $context)
   {
     
@@ -144,10 +145,13 @@ class ccContent implements ccContentInterface
     
     foreach($context as $key => $value)
     {
-      $finalContext[$open.$key.$close] = $value;
+      $finalContext[$this->_opentag.$key.$this->_closetag] = $value;
     }
-    
-    return strtr($content, $context);
+    $output = strtr($content, $finalContext);
+
+    // echo '<pre>'.print_r($output,1).'</pre>';
+
+    return $output;
   }
 
   public function __get($key)
@@ -163,11 +167,8 @@ class ccContent implements ccContentInterface
       case 'path':
         return $this->getPath();
         break;
-      case 'type':
-        return $this->getType();
-        break;
       default:
-        throw new Exception('Undefined property %s.', $key);
+        throw new Exception(sprintf('Undefined property %s.', $key));
         break;
     }
   }

@@ -94,19 +94,16 @@ class ccFinder
   
   public function addFiletype($type, $extensions)
   {
-    if(!is_array($extensions))
-    {
-      $extensions = explode(',', (string) $extensions);
-      array_walk($extensions, 'trim');
-    }
-    
+    $extensions = ccArray::make($extensions);
     $this->_filetypes[$type] = $extensions;
+
   }
   
 // protected functions _________________________________________________________
 
   protected function doFind($path)
   {
+
     $filename = ccPath::os($this->getRoot(), $path);
     
     $locations = $this->getPossibleLocations($filename);
@@ -119,6 +116,7 @@ class ccFinder
         {
           if(file_exists($loc . '.' . $ext))
           {
+            //echo "<pre>$loc.$ext</pre>";
             return ccContentFactory::createContent($loc.'.'.$ext, $type);
           }
         }
@@ -131,7 +129,7 @@ class ccFinder
   
   protected function getPossibleLocations($filename)
   {
-    $filename = ccPath::trim($filename);
+    $filename = ccPath::clean($filename);
 
     $dir = $this->getDirName();
     $idx = $this->getIndexName();
@@ -171,7 +169,8 @@ class ccCascadingFinder extends ccFinder
 
   public function find($path)
   {
-    return $this->cascade($path);
+    $r = $this->cascade($path);
+    return $r;
   }
 
   public function findPath($path, $base)
@@ -219,7 +218,7 @@ class ccCascadingFinder extends ccFinder
           return array_reverse($results);
         }
 
-        if($result->isCascading())
+        if(!$result->isCascading())
         {
           break;
         }
@@ -228,8 +227,9 @@ class ccCascadingFinder extends ccFinder
     
     $master = $this->doFind('/');
     $results[] = $master;
-    
-    return $this->_multiple ? array_reverse($results) : $master;
+    $results = array_filter($results);
+    $results = array_reverse($results);
+    return $this->_multiple ? $results : $master;
   }
 }
 
@@ -240,7 +240,14 @@ class ccContentFinder extends ccFinder
 
 class ccMetaFinder extends ccCascadingFinder
 {
-  protected $_filetypes = array('yaml' => 'yml,yaml');
+  protected $_filetypes = array('yaml' => 'yml, yaml');
+
+  public function find($path)
+  {
+    $r = parent::find($path);
+    return $r;
+    
+  }
 }
 
 class ccStyleFinder extends ccCascadingFinder
