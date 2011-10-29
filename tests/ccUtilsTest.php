@@ -4,6 +4,23 @@ require_once 'ccTestCase.php';
 
 require_once 'lib/ccUtils.php';
 
+class ccArrayTest extends ccTestCase
+{
+  /*
+   * function testMake
+   */
+  public function testMake()
+  {
+    $e = array('one', 'two', 'three');
+    $in = 'one, two , three';
+    $r = ccArray::make($in);
+    $this->assertEquals($e, $r);
+    
+    $r = ccArray::make(explode(',', $in));
+    $this->assertEquals($e, $r);
+  }
+}
+
 class ccPathTest extends ccTestCase
 {
   public function testWeb()
@@ -102,15 +119,16 @@ class ccFileTest extends ccTestCase
   public function testFirstLine()
   {
     $path = $this->getFilePath('testFirstLine');
-    $expected = 'first line';
+    $expected = "first line";
     
     $f = $path.'simple.txt';
     $result = ccFile::firstLine($f);
     $this->assertEquals($expected, $result);
-    
+        
     $f = $path.'empty_lines.txt';
     $result = ccFile::firstLine($f);
     $this->assertEquals($expected, $result, "Empty lines were not ignored.");
+
   }
 
   public function testExtension()
