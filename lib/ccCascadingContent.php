@@ -108,6 +108,10 @@ class ccCascadingContent
 
     $this->registerContentType('script', 'js', 'js');
 
+    $this->registerContentType('partial', 'markdown', 'markdown,md');
+    $this->registerContentType('partial', 'html', 'html,htm');
+    $this->registerContentType('partial', 'php', 'php,phtml');
+
     $this->registerContentType('content', 'markdown', 'markdown,md');
     $this->registerContentType('content', 'html', 'html,htm');
     $this->registerContentType('content', 'php', 'php,phtml');
@@ -233,6 +237,13 @@ class ccCascadingContent
     return $layout->render($this->getContext());
   }
 
+  /**
+   * Creates a ccFinder instance with filetypes defined in registerContentTypes
+   * 
+   * @param string $type a finder type.
+   *
+   * @return ccFinder $finder
+   */
   protected function getFinder($type)
   {
     $idx = sprintf("%s_name", $type === 'content' ? 'index' : $type);
@@ -324,11 +335,11 @@ class ccCascadingContent
   protected function initContext()
   {
     $this->setContext(array(
-      'js' => $this->getConfig()->get('script_dir'),
+      'js'  => $this->getConfig()->get('script_dir'),
       'css' => $this->getConfig()->get('style_dir'),
       'img' => $this->getConfig()->get('img_dir'),
-      '/' => $this->getConfig()->get('base_path'),
-      '@' => $this->getConfig()->get('attachments'),
+      '/'   => $this->getConfig()->get('base_path'),
+      '@'   => $this->getConfig()->get('attachments'),
     ));
   }
   

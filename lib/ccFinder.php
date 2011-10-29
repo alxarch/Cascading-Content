@@ -269,6 +269,22 @@ class ccScriptFinder extends ccCascadingFinder
   protected $_filetypes = array('js' => 'js');
 }
 
+class ccPartialFinder extends ccCascadingFinder
+{
+  protected $_multiple = false;
+  protected $_filetypes = array('html' => 'html');
+  
+  /**
+   * Partials are prefixed with '_' and have no index or dir.
+   */
+  protected function getPossibleLocations($filename)
+  {
+    $loc = ccPath::to($filename);
+    $loc = ccPath::os($loc, '_'.ccFile::name($filename));
+    return array($loc);
+  }
+}
+
 class ccLayoutFinder extends ccCascadingFinder
 {
   protected $_multiple = false;
