@@ -18,7 +18,18 @@ require_once 'ccFinder.php';
 
 class ccCascadingContent
 {
+  static protected $_instance;
   protected $_context, $_config, $_cache, $_registered_types;
+  
+  static public function getInstance($userconf)
+  {
+    if(!isset(self::$_instance))
+    {
+      self::$_instance = new ccCascadingContent($userconf);
+    }
+    
+    return self::$_instance;
+  }
   
   public function getDefaults()
   {
@@ -46,7 +57,7 @@ class ccCascadingContent
     );
   }
   
-  public function __construct($userconf = array())
+  protected function __construct($userconf = array())
   {
     if(!is_array($userconf))
     {
