@@ -35,6 +35,7 @@ class ccCascadingContent
   {
 
     $root = dirname($_SERVER['SCRIPT_FILENAME']);
+    "<pre>".print_r($root, 1)."</pre>";
     
     return array(
       'content_path' => 'content',
@@ -65,7 +66,7 @@ class ccCascadingContent
       if(file_exists($userconf))
       {
         $y = new ccContentYaml($userconf);
-        $userconf = $y->render(array());
+        $userconf = ccContentYaml::filter($y->getContents());
       }
       else
       {
@@ -89,6 +90,7 @@ class ccCascadingContent
     $this->_config = $c;
     
     $this->_cache = new ccCache($c->cache_dir);
+    
   }
 
   public function __get($k)
@@ -289,12 +291,23 @@ class ccCascadingContent
     foreach($results as $r)
     {
       $m = $r->render($this->getContext());
-      $meta = $m + $meta;
+      
+      if(isset($m['all']) && is_array($m['all']))
+      {
+        $meta = $m['all'] + $meta;
+      }
+      
+      $path = $r->getPath($this->getConfig()->get('content_dir'));
+      $name = ccFile::name($path, false);
+      
+      if(isset($m[$name]) && is_array($m[$name]))
+      {
+        $meta = $m[$meta] + $meta;
+      }
     }
     //todo: cache to php files.
     return $meta;
   }
-
   
   protected  function getStyles($path)
   {
@@ -356,6 +369,7 @@ class ccCascadingContent
   
   protected function postProccess($output)
   {
+    return $output;
     //TODO: find all scripts and cache them h5bp style.
   }
 
