@@ -2,7 +2,7 @@
 
 class ccRenderer
 {
-  protected $_content, $_commands = array(), $_aliases = array();
+  protected $_content, $_commands = array(), $_aliases = array(), $_context = null;
   
   /**
    * ccRenderer::__construct
@@ -44,39 +44,89 @@ class ccRenderer
     $this->_content = $content;
   }
   
+  protected function setContext($context)
+  {
+    $this->_context = $context;
+  }
+  
+  protected function getContext()
+  {
+    return $this->_context;
+  }
+  
   protected function doRender($context)
   {
-    $context = $this->tokenizeContext($context);
     
     $output = $this->getContent()->getContents();
     
     $output = $this->uncommentTokens($output);
     
-    $output = strtr($output, $context);
+    $output = $this->executeCommands($output, $context);    
     
-    $output = $this->filter($output);
+    $context = $this->tokenizeContext($context);
+    
+    $output = strtr($output, $context);
     
     return $output;
   }
   
-  public function filter($output)
+  protected function executeCommands($output, $context)
   {
     $class = $this->getContentClass();
     
-    $output = $class::filter($output);
+    $pat = '/ %s \s* ([\w\$\+~!#@&][\w\-_]*) \s* : \s* ( [\w\-\/\s]+ ) \s* %s /x';
+    
+    $pat = sprintf($pat, preg_quote($class::TOKEN_OPEN),
+                         preg_quote($class::TOKEN_CLOSE));
+    
+    $this->setContext($context);
+    
+    $output = preg_replace_callback($pat, array($this, 'execute'), $output);
     
     return $output;
+  }
+  
+  public function getCommand($name)
+  {
+    if(isset($this->_aliases[$name]))
+    {
+      $name = $this->_aliases[$name];
+    }
+    
+    if(isset($this->_commands[$name]))
+    {
+      return $this->_commands[$name];
+    }
+    
+    return null;
+  }
+  
+  protected function execute($matches)
+  {
+    $com = $this->getCommand($matches[1]);
+    
+    if(null !== $com)
+    {
+      $args = $matches[2];
+      
+      $result = $com->run($args, $this->getContext());
+      
+      return $result;
+    }
+    
+    return '';
   }
   
   public function addCommand($name, $command, $aliases=array())
   {
     if(!$command instanceof ccRendererCommandInterface)
     {
-      throw new InvalidArgumentException('Command does not implement ccRendererCommandInterface');
+      $msg = 'Command does not implement ccRendererCommandInterface';
+      throw new InvalidArgumentException($msg);
     }
     
     $this->_commands[$name] = $command;
-    
+    $aliases = ccArray::make($aliases);
     foreach($aliases as $alias)
     {
       $this->addAlias($name, $alias);
@@ -90,7 +140,12 @@ class ccRenderer
   
   protected function configure()
   {
-    
+    $this->addCommand('wiki', new ccWikiCommand(), 'w');
+    $this->addCommand('partial', new ccPartialCommand(), '+');
+    $this->addCommand('image', new ccImageCommand(), '!');
+    $this->addCommand('style', new ccStyleCommand(), '~,css');
+    $this->addCommand('script', new ccScriptCommand(), '$,js');
+    $this->addCommand('attachment', new ccAttachmentCommand(), '@,att');
   }
   
   public function uncommentTokens($output)
@@ -151,10 +206,13 @@ interface ccRendererCommandInterface
 
 class ccRendererCommand implements ccRendererCommandInterface
 {
-  
+  public function run($args, $context)
+  {
+    return $args;
+  }
 }
 
-class ccLinkCommand extends ccRendererCommand
+class ccFinderCommand extends ccRendererCommand
 {
   protected $_finder = null;
   
@@ -164,20 +222,32 @@ class ccLinkCommand extends ccRendererCommand
     
     if(null === $this->getFinder())
     {
-      $class = get_class($this);
-      if(preg_match('/cc([A-Z][a-z]+)Command/', $class, $mathes))
-      {
-        $type = strtolower($mathes[1]);
-      }
-      else
-      {
-        $type = 'content';
-      }
-      
-      $finder = ccCascadingContent::getInstance()->getFinder($type);
+      $finder = ccCascadingContent::getInstance()->getFinder('content');
       
       $this->setFinder($finder);
     }
+  }
+  
+  public function run($args, $context)
+  {
+    $content = $this->getFinder()->find(ccPath::web($context['path'], $args));
+    
+    return $content->getPath($this->getFinder()->getRoot());
+    
+  }
+  
+  protected function find($name, $context)
+  {
+    if((is_array($context) || method_exists($context, '__get')) && isset($object['path']))
+    {
+      $path = ccPath::web($context['path'], $name);
+    }
+    else
+    {
+      $path = ccPath::web($name);
+    }
+    
+    return $this->getFinder()->find($path);
   }
   
   public function setFinder(ccFinder $finder)
@@ -191,40 +261,122 @@ class ccLinkCommand extends ccRendererCommand
   }
 }
 
-class ccPartialCommand extends ccRendererCommand
+class ccPartialCommand extends ccFinderCommand
 {
+  protected function configure()
+  {
+    $this->setFinder(ccCascadingContent::getInstance()->getFinder('partial'));  
+  }
+  
   public function run($args, $context)
   {
+    $partial = $this->find($args, $context);
+    
+    if($partial)
+    {
+      // Render the partial passing it a new context that has path reset.
+      $path = $partial->getPath($this->getFinder()->getRoot());
+      
+      $context['path'] = $path;
+      
+      $renderer = new ccRenderer($partial);
+      
+      $output = $renderer->render($context);
+      
+      return $output;
+    
+    }
+    
     return '';
   }
 }
 
-class ccScriptCommand extends ccRendererCommand
+class ccScriptCommand extends ccFinderCommand
 {
-  /**
-   * Cascades through directories to find script content.
-   *
-   * @param string $scriptname
-   * @param context $context
-   */
-  public function run($scriptname, $context)
+  protected function configure()
   {
-    return '';
+    $f = ccCascadingContent::getInstance()->getFinder('script');
+    $f->setIndexName(null);
+    $this->setFinder($f);  
   }
 }
 
 
-class ccStyleCommand extends ccRendererCommand
+class ccStyleCommand extends ccFinderCommand
 {
-  
+  protected function configure()
+  {
+    $f = ccCascadingContent::getInstance()->getFinder('style');
+    $f->setIndexName(null);
+    $f->setMultiple(false);
+    $this->setFinder($f);
+  }
 }
 
-class ccAttachmentCommand extends ccRendererCommand
+class ccAttachmentCommand extends ccFinderCommand
 {
-  
+  protected function configure()
+  {
+    $f = ccCascadingContent::getInstance()->getFinder('attachment');
+    $this->setFinder($f);
+  }
 }
 
-class ccImageCommand extends ccRendererCommand
+class ccImageCommand extends ccFinderCommand
 {
+  protected function configure()
+  {
+    $f = ccCascadingContent::getInstance()->getFinder('image');
+    $this->setFinder($f);
+  }
+}
+
+class ccWikiCommand extends ccFinderCommand
+{
+  protected function configure()
+  {
+    $f = ccCascadingContent::getInstance()->getFinder('content');
+    $f->setIndexName(null);
+    $this->setFinder($f);  
+  }
   
+  public function run($name, $context)
+  {
+    $wiki = $this->find($name, $context);
+    
+    $base = $this->getFinder()->getRoot();
+    
+    if(null === $wiki)
+    {
+      $path = isset($context['path']) ? $context['path'] : '';
+      
+      $file = ccPath::os($base, $path);
+      
+      if(is_dir($file))
+      {
+        $file = ccPath::os($file, $name);
+        $result = ccPath::web($path, $name);
+      }
+      else
+      {
+        $file = ccPath::os(ccPath::to($file), $name);
+        
+        $result = ccPath::web(ccPath::to($path), $name);
+      }
+      
+      $file .= '.md';
+      
+      $title = ccPath::title($name);
+      
+      $contents = "##$title\n\nNo contents.\n";
+       
+      file_put_contents($file, $contents);
+      
+      return $result;
+    }
+    else
+    {
+      return $page->getPath($base);      
+    }
+  }
 }

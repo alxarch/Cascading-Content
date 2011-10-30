@@ -31,14 +31,13 @@ class ccContentFactory
     if(class_exists($class))
     {
       $interfaces = class_implements($class);
-      
       if(array_key_exists('ccContentInterface', $interfaces))
       {
         return true;
       }
     }
-
-    throw new InvalidArgumentException("Invalid content class.");
+    
+    return false;
   }
   
   static protected function getClassName($class)
@@ -57,7 +56,7 @@ interface ccContentInterface
   public function isCascading();
   public function render($context);
   public function getContents();
-  static public function filter($content);
+  public function filter($content);
 }
 
 class ccContent implements ccContentInterface
@@ -96,21 +95,13 @@ class ccContent implements ccContentInterface
     return;
   }
   
-  public function render($context, $renderClass = null)
+  public function render($context)
   {
-    if(null === $renderClass)
-    {
-      $renderClass = 'ccRenderer'; 
-    }
-    
-    $renderer = new $renderClass($this);
-    
-    if(!($renderer instanceof ccRenderer))
-    {
-      throw new InvalidArgumentException('Invalid renderer class provided.');
-    }
+    $renderer = new ccRenderer($this);
     
     $output = $renderer->render($context);
+    
+    $output = $this->filter($output);
     
     return $output;
   }
@@ -143,7 +134,7 @@ class ccContent implements ccContentInterface
     return preg_match($pattern, $line);
   }
   
-  static public function filter($content)
+  public function filter($content)
   {
     return $content;
   }
@@ -168,7 +159,7 @@ class ccContentHtml extends ccContent
 
 class ccContentYaml extends ccContent
 {
-  static public function filter($content)
+  public function filter($content)
   {
     require_once 'vendors/spyc.php';
     $content = spyc_load($content);
@@ -223,7 +214,7 @@ class ccContentMarkdown extends ccContentHtml
   const TOKEN_OPEN = '%';
   const TOKEN_CLOSE = '%';
   
-  static public function filter($content)
+  public function filter($content)
   {
     require_once 'vendors/markdown.php';
     $content = Markdown($content);
@@ -238,7 +229,7 @@ class ccContentJs extends ccContent
    * Minifies javascripts.
    * @uses JSMin.php from @link https://github.com/mrclay/jsmin_minify
    */
-  static public function filter($content)
+  public function filter($content)
   {
     require_once 'vendors/JSMin.php';
     return JSMin::minify($content);
@@ -266,12 +257,30 @@ class ccContentLess extends ccContentCss
    * @return string $css
    * 
    */
-  static public function filter($content)
+  public function filter($content)
   {
     require_once 'vendors/lessc.inc.php';
     $lc = new lessc();
     $content = $lc->parse($content);
     
     return parent::filter($content);
+  }
+}
+
+class ccContentAttachment extends ccContent
+{
+  public function render($context)
+  {
+    $b = ccCascadingContent::getInstance()->getConfig()->get('content_dir');
+    return $this->getPath($b);
+  }
+}
+
+class ccContentImage extends ccContent
+{
+  public function render($context)
+  {
+    $b = ccCascadingContent::getInstance()->getConfig()->get('content_dir');
+    return $this->getPath($b);
   }
 }

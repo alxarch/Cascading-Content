@@ -101,9 +101,13 @@ class ccFinder
     return $this->_filetypes;
   }
   
-  public function addFiletype($type, $extensions)
+  public function addFiletype($type, $extensions=null)
   {
-    $extensions = ccArray::make($extensions);
+    if(null !== $extensions)
+    {
+      $extensions = ccArray::make($extensions);
+    }
+    
     $this->_filetypes[$type] = $extensions;
 
   }
@@ -112,7 +116,6 @@ class ccFinder
 
   protected function doFind($path)
   {
-
     $filename = ccPath::os($this->getRoot(), $path);
     
     $locations = $this->getPossibleLocations($filename);
@@ -121,12 +124,21 @@ class ccFinder
     {
       foreach($locations as $loc)
       {
-        foreach($extensions as $ext)
+        if(null === $extensions)
         {
-          if(file_exists($loc . '.' . $ext))
+          if(file_exists($loc))
           {
-            //echo "<pre>$loc.$ext</pre>";
-            return ccContentFactory::createContent($loc.'.'.$ext, $type);
+            return ccContentFactory::createContent($loc, $type);
+          }
+        }
+        else
+        {
+          foreach($extensions as $ext)
+          {
+            if(file_exists($loc . '.' . $ext))
+            {
+              return ccContentFactory::createContent($loc.'.'.$ext, $type);
+            }
           }
         }
       }
@@ -145,6 +157,8 @@ class ccFinder
     
     $locations = array();
     
+    $locations[] = $filename;
+    
     if($dir && $idx && is_dir($filename))
     {
       $locations[] = ccPath::os($filename, $dir, $idx);
@@ -155,17 +169,18 @@ class ccFinder
       $locations[] = ccPath::os($filename , $idx);
     }
     
-    if($idx && !is_dir($filename))
-    {
-      $locations[] = ccPath::os(dirname($filename), $idx);
-    }
+    //if($idx && !is_dir($filename))
+    //{
+    //  $locations[] = ccPath::os(dirname($filename), $idx);
+    //}
+    //
+    //if($dir && $idx && !is_dir($filename))
+    //{
+    //  $locations[] = ccPath::os(dirname($filename), $dir, $idx);
+    //}
     
-    if($dir && $idx && !is_dir($filename))
-    {
-      $locations[] = ccPath::os(dirname($filename), $dir, $idx);
-    }
+    //echo "<pre>".print_r($locations, 1)."</pre>";
     
-    $locations[] = $filename;
     
     return $locations;
   }
@@ -199,6 +214,11 @@ class ccCascadingFinder extends ccFinder
     }
     
     return $paths;
+  }
+  
+  public function setMultiple($m)
+  {
+    $this->_multiple = $m;
   }
   
 // protected ___________________________________________________________________
@@ -269,6 +289,18 @@ class ccScriptFinder extends ccCascadingFinder
   protected $_filetypes = array('js' => 'js');
 }
 
+class ccImageFinder extends ccCascadingFinder
+{
+  protected $_filetypes = array('img' => 'png,jpg');
+  protected $_multiple = false;
+}
+
+class ccAttachmentFinder extends ccCascadingFinder
+{
+  protected $_filetypes = array('attachment' => null);
+  protected $_multiple = false;
+}
+
 class ccPartialFinder extends ccCascadingFinder
 {
   protected $_multiple = false;
@@ -281,6 +313,7 @@ class ccPartialFinder extends ccCascadingFinder
   {
     $loc = ccPath::to($filename);
     $loc = ccPath::os($loc, '_'.ccFile::name($filename));
+    
     return array($loc);
   }
 }
@@ -289,4 +322,20 @@ class ccLayoutFinder extends ccCascadingFinder
 {
   protected $_multiple = false;
   protected $_filetypes = array('php' => 'php', 'html' => 'html');
+}
+
+class ccErrorFinder extends ccCascadingFinder
+{
+  protected $_multiple = false;
+  protected $_filetypes = array('html' => 'html');
+  
+  protected function getPossibleLocations($filename)
+  {
+    $locations = parent::getPossibleLocations($filename);
+    
+    array_shift($locations);
+    //echo "<pre>".print_r($locations, 1)."</pre>";
+    
+    return $locations;
+  }
 }
