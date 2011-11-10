@@ -21,7 +21,7 @@ abstract class ccTestCase extends PHPUnit_Framework_TestCase
   
   public function getFilePath($test)
   {
-    $test = get_class($this) . '::' . $test . DIRECTORY_SEPARATOR;
+    $test = get_class($this) . '_' . $test . DIRECTORY_SEPARATOR;
     return implode(DIRECTORY_SEPARATOR, array(dirname(__FILE__),'files', $test));
   }
   
