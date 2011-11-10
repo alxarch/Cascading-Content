@@ -10,6 +10,7 @@
  */
 
 require_once 'ccUtils.php';
+require_once 'ccRenderer.php';
 
 class ccContentFactory
 {
@@ -30,14 +31,13 @@ class ccContentFactory
     if(class_exists($class))
     {
       $interfaces = class_implements($class);
-      
       if(array_key_exists('ccContentInterface', $interfaces))
       {
         return true;
       }
     }
-
-    throw new InvalidArgumentException("Invalid content class.");
+    
+    return false;
   }
   
   static protected function getClassName($class)
@@ -53,18 +53,19 @@ interface ccContentInterface
   public function getFile();
   public function setFile($file);
   public function isMaster();
-  public function setMaster(boolean $master);
   public function isCascading();
-  public function setCascading(boolean $cascading);
   public function render($context);
-  public function getRawContents();
   public function getContents();
+  public function filter($content);
 }
 
 class ccContent implements ccContentInterface
 {
-  protected $_opentag = '{{';
-  protected $_closetag = '}}';
+  const TOKEN_OPEN = '{{';
+  const TOKEN_CLOSE = '}}';
+  const LINE_COMMENT = null;
+  const BLOCK_COMMENT_OPEN = '/*';
+  const BLOCK_COMMENT_CLOSE = '*/';
   
   protected $_file;
   protected $_master = false;
@@ -89,11 +90,6 @@ class ccContent implements ccContentInterface
     return false;
   }
   
-  public function setCascading(boolean $cascading)
-  {
-    return;
-  }
-  
   public function setMaster(boolean $master)
   {
     return;
@@ -101,33 +97,18 @@ class ccContent implements ccContentInterface
   
   public function render($context)
   {
-    $content = $this->getContents();
+    $renderer = new ccRenderer($this);
     
-    $content = $this->doRender($content, $context);
-   
-
-    if(method_exists($this, 'postFilter'))
-    {
-      $content = $this->postFilter($content);
-    }
+    $output = $renderer->render($context);
     
-    return $content;
-  }
-  
-  public function getRawContents()
-  {
-    $contents = file_get_contents($this->getFile());
-    return $contents;
+    $output = $this->filter($output);
+    
+    return $output;
   }
   
   public function getContents()
   {
-    $contents = $this->getRawContents();
-    if(method_exists($this, 'preFilter'))
-    {
-      $contents = $this->preFilter($contents);
-    }
-    
+    $contents = file_get_contents($this->getFile());
     return $contents;
   }
   
@@ -147,83 +128,22 @@ class ccContent implements ccContentInterface
     return $this->_file;
   }
 
-  protected function doRender($content, $context)
-  {
-    
-    $finalContext = array();
-    
-    foreach($context as $key => $value)
-    {
-      $finalContext[$this->_opentag.$key.$this->_closetag] = $value;
-    }
-    $output = strtr($content, $finalContext);
-
-    // echo '<pre>'.print_r($output,1).'</pre>';
-
-    return $output;
-  }
-
-  public function __get($key)
-  {
-    switch($key)
-    {
-      case 'file':
-        return $this->getFile();
-        break;
-      case 'master':
-        return $this->isMaster();
-        break;
-      case 'path':
-        return $this->getPath();
-        break;
-      default:
-        throw new Exception(sprintf('Undefined property %s.', $key));
-        break;
-    }
-  }
-
-  public function __set($k, $v)
-  {
-    switch($k)
-    {
-      case 'file':
-        return $this->setFile($v);
-        break;
-      case 'master':
-        return $this->isMaster($v);
-        break;
-      case 'path':
-        return $this->setPath($v);
-        break;
-      case 'type':
-        throw new Exception('Content type of an instance cannot be changed.');
-        break;
-      default:
-        throw new Exception('Undefined property %s.', $key);
-        break;
-    }
-  }
-  
   protected function matchFirstLine($pattern)
   {
     $line = ccFile::firstLine($this->getFile());
     return preg_match($pattern, $line);
   }
+  
+  public function filter($content)
+  {
+    return $content;
+  }
 }
 
 class ccContentHtml extends ccContent
 {
-  protected function preFilter($content)
-  {
-    // strip html comments around escaping chars.
-    $p = '/<!\-\-\s*(%s[\w\-_]+%s)\s*\-\->/';
-    
-    $p = sprintf($p, preg_quote($this->_opentag), preg_quote($this->_closetag));
-    
-    $content = preg_replace($p, '$1', $content);
-    
-    return $content;
-  }
+  const BLOCK_COMMENT_OPEN = '<!--';
+  const BLOCK_COMMENT_CLOSE = '-->';
   
   public function isMaster()
   {
@@ -239,7 +159,7 @@ class ccContentHtml extends ccContent
 
 class ccContentYaml extends ccContent
 {
-  protected function postFilter($content)
+  public function filter($content)
   {
     require_once 'vendors/spyc.php';
     $content = spyc_load($content);
@@ -275,11 +195,8 @@ class ccContentPhp extends ccContent
 
 class ccContentCss extends ccContent
 {
-  protected function configure()
-  {
-    $this->_closetag = '%%';
-    $this->_opentag = '%%';
-  }
+  const TOKEN_OPEN = '%';
+  const TOKEN_CLOSE = '%';
   
   public function isMaster()
   {
@@ -294,17 +211,14 @@ class ccContentCss extends ccContent
 
 class ccContentMarkdown extends ccContentHtml
 {
-  protected function configure()
-  {
-    $this->_closetag = '%';
-    $this->_opentag = '%';
-  }
+  const TOKEN_OPEN = '%';
+  const TOKEN_CLOSE = '%';
   
-  public function preFilter($content)
+  public function filter($content)
   {
     require_once 'vendors/markdown.php';
     $content = Markdown($content);
-    $content = parent::preFilter($content);
+    $content = parent::filter($content);
     return $content;
   }
 }
@@ -315,7 +229,7 @@ class ccContentJs extends ccContent
    * Minifies javascripts.
    * @uses JSMin.php from @link https://github.com/mrclay/jsmin_minify
    */
-  protected function postFilter($content)
+  public function filter($content)
   {
     require_once 'vendors/JSMin.php';
     return JSMin::minify($content);
@@ -343,12 +257,30 @@ class ccContentLess extends ccContentCss
    * @return string $css
    * 
    */
-  protected function preFilter($content)
+  public function filter($content)
   {
     require_once 'vendors/lessc.inc.php';
     $lc = new lessc();
     $content = $lc->parse($content);
     
-    return parent::preFilter($content);
+    return parent::filter($content);
+  }
+}
+
+class ccContentAttachment extends ccContent
+{
+  public function render($context)
+  {
+    $b = ccCascadingContent::getInstance()->getConfig()->get('content_dir');
+    return $this->getPath($b);
+  }
+}
+
+class ccContentImage extends ccContent
+{
+  public function render($context)
+  {
+    $b = ccCascadingContent::getInstance()->getConfig()->get('content_dir');
+    return $this->getPath($b);
   }
 }

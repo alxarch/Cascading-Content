@@ -18,35 +18,48 @@ require_once 'ccFinder.php';
 
 class ccCascadingContent
 {
+  static protected $_instance;
   protected $_context, $_config, $_cache, $_registered_types;
+  
+  static public function getInstance($userconf=array())
+  {
+    if(!isset(self::$_instance))
+    {
+      self::$_instance = new ccCascadingContent($userconf);
+    }
+    
+    return self::$_instance;
+  }
   
   public function getDefaults()
   {
 
     $root = dirname($_SERVER['SCRIPT_FILENAME']);
+    "<pre>".print_r($root, 1)."</pre>";
     
     return array(
-      'content_path' => 'content',
-      'cache_path'   => 'cache',
-      'layout_name'  => 'layout',
-      'index_name'   => 'index',
-      'style_name'   => 'style',
-      'style_dir'    => '__css__',
-      'script_name'  => 'script',
-      'script_dir'   => '__js__',
-      'meta_name'    => 'meta',
-      'meta_dir'     => '__meta__',
-      'part_dir'     => '__part__',
-      'attachments'  => '__attachments__',
-      'img_dir'      => '__img__',
-      'base_path'    => ccPath::to($_SERVER['SCRIPT_NAME']),
-      'root_dir'     => $root,
-      'content_dir'  => ccPath::os($root, 'content'),
-      'cache_dir'    => ccPath::os($root, 'cache'),
+      'content_path'   => 'content',
+      'cache_path'     => 'cache',
+      'layout_name'    => 'layout',
+      'index_name'     => 'index',
+      'style_name'     => 'style',
+      'script_name'    => 'script',
+      'meta_name'      => 'meta',
+      'style_dir'      => '__css__',
+      'script_dir'     => '__js__',
+      'meta_dir'       => '__meta__',
+      'part_dir'       => '__part__',
+      'image_dir'      => '__img__',
+      'error_dir'      => '__error__',
+      'attachment_dir' => '__attachments__',
+      'base_path'      => ccPath::to($_SERVER['SCRIPT_NAME']),
+      'root_dir'       => $root,
+      'content_dir'    => ccPath::os($root, 'content'),
+      'cache_dir'      => ccPath::os($root, 'cache'),
     );
   }
   
-  public function __construct($userconf = array())
+  protected function __construct($userconf = array())
   {
     if(!is_array($userconf))
     {
@@ -54,7 +67,7 @@ class ccCascadingContent
       if(file_exists($userconf))
       {
         $y = new ccContentYaml($userconf);
-        $userconf = $y->render(array());
+        $userconf = ccContentYaml::filter($y->getContents());
       }
       else
       {
@@ -78,6 +91,7 @@ class ccCascadingContent
     $this->_config = $c;
     
     $this->_cache = new ccCache($c->cache_dir);
+    
   }
 
   public function __get($k)
@@ -108,16 +122,26 @@ class ccCascadingContent
 
     $this->registerContentType('script', 'js', 'js');
 
+    $this->registerContentType('partial', 'markdown', 'markdown,md');
+    $this->registerContentType('partial', 'html', 'html,htm');
+    $this->registerContentType('partial', 'php', 'php,phtml');
+
     $this->registerContentType('content', 'markdown', 'markdown,md');
     $this->registerContentType('content', 'html', 'html,htm');
     $this->registerContentType('content', 'php', 'php,phtml');
-
+    
+    $this->registerContentType('error', 'html', 'html,htm');
+    
     $this->registerContentType('layout', 'html', 'html');
     $this->registerContentType('layout', 'php', 'php');
-
+    
+    $this->registerContentType('image', 'image', 'jpg,png');
+    
+    $this->registerContentType('attachment', 'attachment', null);
+    
   }
 
-  public function registerContentType($category, $type, $extensions)
+  public function registerContentType($category, $type, $extensions=null)
   {
     ccContentFactory::validate($type);
 
@@ -126,11 +150,15 @@ class ccCascadingContent
       $this->_registered_types[$category] = array();
     }
     
-    $extensions = ccArray::make($extensions);
+    if(null !== $extensions)
+    {
+      $extensions = ccArray::make($extensions);
+    }
 
     $this->_registered_types[$category][$type] = $extensions;
     
   }
+
 
   public function getRegisteredTypes($category)
   {
@@ -147,7 +175,7 @@ class ccCascadingContent
     return $this->_config;
   }
     
-  protected function getCache()
+  public function getCache()
   {
     return $this->_cache;
   }
@@ -170,7 +198,7 @@ class ccCascadingContent
     
       if(null === $output)
       {
-        $this->notFound();
+        $this->notFound($path);
       }
 
       $this->getCache()->store($path.'.html', $output);
@@ -179,11 +207,10 @@ class ccCascadingContent
     exit(0);
   }
   
-  protected function notFound()
+  protected function notFound($path)
   {
     @header( CGI ? "Status: 404 Not Found" : "HTTP/1.1 404 Not Found");
-    $error = ccPath::os($this->getConfig()->get('content_dir'), '404.html');
-    readfile($error);
+    echo $this->error(404, $path);
   }
   
   protected function generate($path)
@@ -233,26 +260,13 @@ class ccCascadingContent
     return $layout->render($this->getContext());
   }
 
-  protected function getFinder($type)
-  {
-    $idx = sprintf("%s_name", $type === 'content' ? 'index' : $type);
-    $dir = $type === 'content' ? null : $type.'_dir';
-    
-    $finder = ccFinderFactory::createFinder($type, 
-      $this->getConfig()->get('content_dir'),
-      $this->getRegisteredTypes($type),
-      $this->getConfig()->get($idx),
-      $this->getConfig()->get($dir));
-    
-    return $finder;
-  }
   
   protected function getContent($path)
   {
     $finder = $this->getFinder('content');
-
+    
     $result = $finder->find($path);
-
+    
     return $result;
   }
   
@@ -267,12 +281,23 @@ class ccCascadingContent
     foreach($results as $r)
     {
       $m = $r->render($this->getContext());
-      $meta = $m + $meta;
+      
+      if(isset($m['all']) && is_array($m['all']))
+      {
+        $meta = $m['all'] + $meta;
+      }
+      
+      $path = $r->getPath($this->getConfig()->get('content_dir'));
+      $name = ccFile::name($path, false);
+      
+      if(isset($m[$name]) && is_array($m[$name]))
+      {
+        $meta = $m[$meta] + $meta;
+      }
     }
     //todo: cache to php files.
     return $meta;
   }
-
   
   protected  function getStyles($path)
   {
@@ -324,19 +349,57 @@ class ccCascadingContent
   protected function initContext()
   {
     $this->setContext(array(
-      'js' => $this->getConfig()->get('script_dir'),
+      'js'  => $this->getConfig()->get('script_dir'),
       'css' => $this->getConfig()->get('style_dir'),
       'img' => $this->getConfig()->get('img_dir'),
-      '/' => $this->getConfig()->get('base_path'),
-      '@' => $this->getConfig()->get('attachments'),
+      '/'   => $this->getConfig()->get('base_path'),
+      '@'   => $this->getConfig()->get('attachments'),
     ));
+  }
+  
+  /**
+   * Creates a ccFinder instance with filetypes defined in registerContentTypes
+   * 
+   * @param string $type a finder type.
+   *
+   * @return ccFinder $finder
+   */
+  public function getFinder($type)
+  {
+    $idx = sprintf("%s_name", $type === 'content' ? 'index' : $type);
+    $dir = $type === 'content' ? null : $type.'_dir';
+    
+    $finder = ccFinderFactory::createFinder($type, 
+      $this->getConfig()->get('content_dir'),
+      $this->getRegisteredTypes($type),
+      $this->getConfig()->get($idx),
+      $this->getConfig()->get($dir));
+    
+    return $finder;
   }
   
   protected function postProccess($output)
   {
+    return $output;
     //TODO: find all scripts and cache them h5bp style.
   }
-
+  
+  public function error($code, $path='/')
+  {
+    $f = $this->getFinder('error');
+    
+    $f->setIndexName($code);
+    
+    $error = $f->find($path);
+    
+    if(null === $error)
+    {
+      return "Error $code.";
+    }
+    
+    return $error->render($this->getContext());
+  }
+  
   //protected function cacheResults($path, $items, $glue="\n;")
   //{
   //

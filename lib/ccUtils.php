@@ -137,6 +137,11 @@ class ccPath
   {
     $path = self::web($path);
     $paths = array();
+    
+    if(strpos($path, '/') !== 0)
+    {
+      $path = '/'.$path;
+    }
 
     for(;($i=strrpos($path, '/')) !== false; $path = substr($path, 0, $i))
     {
@@ -144,6 +149,20 @@ class ccPath
     }
     
     return $paths;
+  }
+  
+  static public function title($path)
+  {
+    $path = self::trim(self::web($path));
+    
+    $title = explode('/', $path);
+  
+    foreach($title as $i => $t)
+    {
+      $title[$i] = ucfirst($t);
+    }
+  
+    return implode(' - ', array_filter($title));
   }
 }
 
